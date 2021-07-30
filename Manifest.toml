@@ -368,9 +368,9 @@ version = "0.16.4"
 
 [[MLJBase]]
 deps = ["CategoricalArrays", "ComputationalResources", "Dates", "DelimitedFiles", "Distributed", "Distributions", "InteractiveUtils", "InvertedIndices", "LinearAlgebra", "LossFunctions", "MLJModelInterface", "MLJScientificTypes", "Missings", "OrderedCollections", "Parameters", "PrettyTables", "ProgressMeter", "Random", "StatisticalTraits", "Statistics", "StatsBase", "Tables"]
-git-tree-sha1 = "9f757518de8f8b89defa1f9db31b757d914fe5ac"
+git-tree-sha1 = "f12e4054cdf589b1aa7b2e034b1add51d8dc16d9"
 uuid = "a7f614a8-145f-11e9-1d2a-a57a1082229d"
-version = "0.18.6"
+version = "0.18.8"
 
 [[MLJDecisionTreeInterface]]
 deps = ["DecisionTree", "MLJModelInterface"]

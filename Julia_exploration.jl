@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.15.1
+# v0.14.7
 
 using Markdown
 using InteractiveUtils
@@ -11,6 +11,8 @@ begin
 	using CSV: File
 	using BSON: @save, @load
 	using DataFrames
+	using Plots
+	using LatinHypercubeSampling
 end
 
 # ╔═╡ 51275cee-2580-47ad-b9f7-d30c2bc3d2cc
@@ -18,6 +20,15 @@ begin
 	load_lcs(file::String) = DataFrame(File(file))
 	d_smc = load_lcs("data/carac_smc")	
 	d_lmc = load_lcs("data/carac_lmc")
+end
+
+# ╔═╡ c1559a5e-0a21-4837-a4a7-04ab750ca322
+begin
+	#function isx(value,class::string)
+	#	a = value == class
+	#assign(is_ceph = d_smc[:,"obs"] .== "CC") 
+	DataFrames.transform!(d_smc, :obs => (v -> v .== "CC") => :iceph)
+	DataFrames.transform!(d_lmc, :obs => (v -> v .== "CC") => :iceph)
 end
 
 # ╔═╡ daec8c09-f39c-495c-9c2e-4de35ef5ca98
@@ -29,26 +40,22 @@ feature_keys = [:med, :mad, :os, :low, :row, :rAbbe,
 begin
 	inside(feature:: Symbol) = feature in feature_keys
 	y_test, X_test =  unpack(d_smc,
-	               ==(:obs),            # y is the :Exit column
+	               ==(:iceph),            # y is the :Exit column
 	               colname -> inside(colname);            # X is the rest, except :Time
-					wrap_singles=false,
-	               :med=>Continuous,
-	               :obs=>Multiclass)
+				    #wrap_singles=true,
+	               :med=>MLJ.Continuous,
+	               :iceph=>OrderedFactor)
 	
 	y_train, X_train =  unpack(d_lmc,
-	              ==(:obs),            # y is the :Exit column
+	              ==(:iceph),            # y is the :Exit column
 	              colname -> inside(colname);            # X is the rest, except :Time
-	              wrap_singles=false,
-				  :med=>Continuous,
-	              :obs=>Multiclass)	
+	              #wrap_singles=true,
+				  :med=>MLJ.Continuous,
+	              :iceph=>OrderedFactor)	
 end
 
 # ╔═╡ 28f21947-c5c1-4ef6-b1f2-a95c15172712
 schema(X_train)
-
-# ╔═╡ 2b97dfc5-b2a9-497d-8d07-fe65a17a4394
-models(matching(X_train,y_train))
-
 
 # ╔═╡ a62a7aa2-ca49-4c04-96f2-40c81637e5f6
 models() do model
@@ -57,43 +64,77 @@ models() do model
 end
 
 # ╔═╡ bf8c0dae-1e8a-4809-be9b-94b7f61a26f8
-Tree = MLJ.@load RandomForestClassifier pkg=BetaML add=true
+#Model = MLJ.@load ConstantClassifier pkg=MLJModels add=true
+#Model = MLJ.@load RandomForestClassifier pkg=DecisionTree add=true
 
-# ╔═╡ 8bb45a9e-046d-4dd7-9f4b-66b26df7a7c9
-tree = Tree(maxDepth = 2)
+# ╔═╡ 05301e75-f974-41a3-ac5c-e525e1a1e625
+md"""
+## Testing Models
+"""
 
-# ╔═╡ 52cd7cb8-fc14-47b2-b369-ab9a1c4e173d
-mach = machine(tree, X_test, y_test)
+# ╔═╡ 18019ff2-897b-4e47-ab77-3668432bd482
+begin
+	Model = MLJ.@load RandomForestClassifier pkg=DecisionTree add=true
+	model = Model()
+end
+
+# ╔═╡ c54b3b70-ecf0-48d0-8278-c827a0c4f236
+begin
+	r = [range(model, :max_depth, lower=2, upper=14.0, scale=:linear),
+		 range(model, :n_subfeatures, lower=2, upper=14.0, scale=:linear),
+		 range(model, :n_trees, lower=5, upper=100, scale=:log)]
+	self_tuning_tree = TunedModel(model=model,
+	                              resampling=CV(nfolds=5),
+	                              tuning=Grid(resolution=8),
+	                              range=r,
+								  operation=predict_mode,
+	                              measure=balanced_accuracy);
+	mach = machine(self_tuning_tree, X_test, y_test);
+	println("Fitting");
+	fit!(mach)
+end
+
+# ╔═╡ b6bf8b34-5404-4d40-b909-05e788ab9261
 
 
-# ╔═╡ c6ca4ba2-66f6-4115-b5d6-2dca30bd9b02
-fit!(mach)
+# ╔═╡ 1b7e0486-d5c4-483f-829c-41a8bf4463ae
+begin
+	#ŷ, y_train
+	measure_mach = machine( fitted_params(mach).best_model,	X_test,y_test)
+	ŷ = predict_mode(mach, X_train)
+	balanced_accuracy(y_train,ŷ), MLJ.evaluate!(measure_mach, resampling=StratifiedCV(nfolds=6, shuffle=true),
+	measure=confmat, operation=predict_mode)
+end
 
-# ╔═╡ c31e3b04-e07b-492a-9d11-7435133eadf0
-yhat = predict_mode(mach, X_train)
+# ╔═╡ e68a766c-d70a-4821-a10e-05991cb22eee
+report(mach)
 
-
-# ╔═╡ 1ebf451c-9b96-4827-97c7-523ceca2312d
-predict_mode(mach, X_test)
-
-# ╔═╡ e6d2e2bf-79ce-4d72-a409-bcfa6057d1d8
-MLJ.evaluate!(mach, resampling=CV(nfolds=5), measure=crossentroy)
+# ╔═╡ e57d982c-16bc-4bf2-9266-7dfc3224e125
+plot(mach)
 
 # ╔═╡ 5af05cb2-2f28-4ece-87d9-655caa2fc6a6
 measures(m -> m.target_scitype <: AbstractVector{<:Finite})
 
-# ╔═╡ b65eb863-a7b6-4899-8dd9-1fa40798c147
+# ╔═╡ 58a2c690-b42d-43d0-baef-caeced8c9369
+"""
+begin
+	Model = MLJ.@load AdaBoostStumpClassifier pkg=DecisionTree add=true
+	model = Model(n_iter = 5)
+	r = [range(model, :n_iter, lower=5, upper=15.0, scale=:linear),
+		 range(model, :pdf_smoothing, lower=0.0, upper=1.0, scale=:linear)]
+	self_tuning_tree = TunedModel(model=model,
+	                              resampling=CV(nfolds=5),
+	                              tuning=Grid(resolution=8),
+	                              range=r,
+								  operation=predict_mode,
+	                              measure=balanced_accuracy);
+	mach = machine(self_tuning_tree, X_test, y_test);
+	println("Fitting");
+	fit!(mach)
+end
+"""
 
-
-# ╔═╡ fd661753-6d97-45bb-95c7-43acd7e4e176
-
-
-# ╔═╡ 70026ea3-cc56-4dbe-9948-739924eeda5d
-mach
-
-
-# ╔═╡ c2124601-42c9-4aa3-8cc2-7fb23e5a02b8
-schema(y_train)
+# ╔═╡ 485e34c5-ece6-40f0-a2c5-d16d07e589f2
 
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -104,6 +145,7 @@ BetaML = "024491cd-cc6b-443e-8034-08ea7eb7db2b"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 MLJ = "add582a8-e3ab-11e8-2d5e-e98b27df1bc7"
+MLJModels = "d491faf4-2d78-11e9-2867-c94bc002c0b7"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [compat]
@@ -834,25 +876,28 @@ deps = ["Artifacts", "Libdl"]
 uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 """
 
+# ╔═╡ 9b7bb8cd-3558-4711-8041-f3877b9f2f58
+LatinHypercube(gens=2, popsize=120)
+
 # ╔═╡ Cell order:
 # ╠═d217d212-f030-11eb-2b33-4520f959c41d
 # ╠═51275cee-2580-47ad-b9f7-d30c2bc3d2cc
+# ╠═c1559a5e-0a21-4837-a4a7-04ab750ca322
 # ╠═daec8c09-f39c-495c-9c2e-4de35ef5ca98
 # ╠═17f0751e-d319-4641-a6a8-524c522bd6ce
 # ╠═28f21947-c5c1-4ef6-b1f2-a95c15172712
-# ╠═2b97dfc5-b2a9-497d-8d07-fe65a17a4394
 # ╠═a62a7aa2-ca49-4c04-96f2-40c81637e5f6
 # ╠═bf8c0dae-1e8a-4809-be9b-94b7f61a26f8
-# ╠═8bb45a9e-046d-4dd7-9f4b-66b26df7a7c9
-# ╠═52cd7cb8-fc14-47b2-b369-ab9a1c4e173d
-# ╠═c6ca4ba2-66f6-4115-b5d6-2dca30bd9b02
-# ╠═c31e3b04-e07b-492a-9d11-7435133eadf0
-# ╠═1ebf451c-9b96-4827-97c7-523ceca2312d
-# ╠═e6d2e2bf-79ce-4d72-a409-bcfa6057d1d8
+# ╟─05301e75-f974-41a3-ac5c-e525e1a1e625
+# ╠═18019ff2-897b-4e47-ab77-3668432bd482
+# ╠═c54b3b70-ecf0-48d0-8278-c827a0c4f236
+# ╟─b6bf8b34-5404-4d40-b909-05e788ab9261
+# ╠═1b7e0486-d5c4-483f-829c-41a8bf4463ae
+# ╠═e68a766c-d70a-4821-a10e-05991cb22eee
+# ╠═e57d982c-16bc-4bf2-9266-7dfc3224e125
 # ╠═5af05cb2-2f28-4ece-87d9-655caa2fc6a6
-# ╠═b65eb863-a7b6-4899-8dd9-1fa40798c147
-# ╠═fd661753-6d97-45bb-95c7-43acd7e4e176
-# ╠═70026ea3-cc56-4dbe-9948-739924eeda5d
-# ╠═c2124601-42c9-4aa3-8cc2-7fb23e5a02b8
+# ╠═58a2c690-b42d-43d0-baef-caeced8c9369
+# ╠═485e34c5-ece6-40f0-a2c5-d16d07e589f2
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
+# ╠═9b7bb8cd-3558-4711-8041-f3877b9f2f58
