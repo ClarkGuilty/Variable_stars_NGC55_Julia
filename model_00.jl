@@ -1,3 +1,7 @@
+using Pkg
+Pkg.add("Tables", "MLJ", "CSV", "BSON", "DataFrames", "Plots", "LatinHypercubeSampling")
+
+
 using Tables
 using MLJ
 using CSV: File
