@@ -1,5 +1,12 @@
 using Pkg
-Pkg.add("Tables", "MLJ", "CSV", "BSON", "DataFrames", "Plots", "LatinHypercubeSampling")
+Pkg.add("Plots")
+Pkg.add("LatinHypercubeSampling")
+Pkg.add("DataFrames")
+Pkg.add("BSON")
+Pkg.add("CSV")
+Pkg.add("MLJ")
+Pkg.add("Tables")
+
 
 
 using Tables
