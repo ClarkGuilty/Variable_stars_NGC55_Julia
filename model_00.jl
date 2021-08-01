@@ -54,14 +54,17 @@ self_tuning_tree = TunedModel(model=model,
                               resampling=CV(nfolds=5),
                               tuning=Grid(resolution=8),
                               range=r,
-							  operation=predict_mode,
+			                  operation=predict_mode,
+			                  acceleration=CPUThreads(),
+			                  acceleration_resampling=CPUThreads(),
                               measure=balanced_accuracy);
 mach = machine(self_tuning_tree, X_test, y_test);
 println("Fitting");
 fit!(mach)
 	
-measure_mach = machine( fitted_params(mach).best_model,	X_test,y_test)
+measure_mach = machine( fitted_params(mach).best_model,	X_train,y_train)
 ŷ = predict_mode(mach, X_train)
-balanced_accuracy(y_train,ŷ), MLJ.evaluate!(measure_mach, resampling=StratifiedCV(nfolds=6, shuffle=true),
-    measure=confmat, operation=predict_mode)
+@show balanced_accuracy(y_train,ŷ)
+@show MLJ.evaluate!(measure_mach, resampling=StratifiedCV(nfolds=8, shuffle=true),
+    measure=confmat, operation=predict_mode,acceleration=CPUThreads())
 
