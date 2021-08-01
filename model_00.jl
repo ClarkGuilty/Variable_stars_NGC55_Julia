@@ -17,6 +17,8 @@ using DataFrames
 using Plots
 using LatinHypercubeSampling
 
+MLJ.default_resource(CPUThreads())
+
 load_lcs(file::String) = DataFrame(File(file))
 d_smc = load_lcs("data/carac_smc")	
 d_lmc = load_lcs("data/carac_lmc")
@@ -51,8 +53,8 @@ r = [range(model, :max_depth, lower=2, upper=14.0, scale=:linear),
 	 range(model, :n_subfeatures, lower=2, upper=14.0, scale=:linear),
 	 range(model, :n_trees, lower=5, upper=100, scale=:log)]
 self_tuning_tree = TunedModel(model=model,
-                              resampling=CV(nfolds=5),
-                              tuning=Grid(resolution=8),
+                              resampling=CV(nfolds=4),
+                              tuning=Grid(resolution=2),
                               range=r,
 			                  operation=predict_mode,
 			                  acceleration=CPUThreads(),
